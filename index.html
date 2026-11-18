@@ -1,0 +1,919 @@
+<title>Birthday Cake Code</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: 터미널 창 하나 — 위는 아스키 케이크 캔버스, 아래는 타이핑되는 코드 에디터. 단일 다크 룩. */
+  :root {
+    --bg: #0a0b10;
+    --panel: #11131b;
+    --screen: #06070b;
+    --line: #1f2330;
+    --dim: #646b7c;
+    --text: #d4d8e0;
+    --warm: #ffb85c;
+    --blue: #6aa8ff;
+    --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+    --font-ui: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    margin: 0;
+    font-family: var(--font-mono);
+    display: flex; flex-direction: column; align-items: center;
+    padding-block: 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .win {
+    width: 100%; max-width: 860px; min-width: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .bar, .status, .term, .tabs {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    font-size: 12px; color: var(--dim); padding: 8px 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar { border-bottom: 1px solid var(--line); }
+  .bar b { color: var(--text); font-weight: 500; }
+  canvas { display: block; background: var(--screen); width: 100%; }
+  .status { border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .term { color: var(--text); font-size: 13px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  #run { color: var(--dim); }
+  #run i { color: var(--blue); font-style: normal; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 12px; color: var(--text);
+    background: #1a1e2a; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  @media (max-width: 560px) {
+    .term { justify-content: center; }
+    .term > span { flex-basis: 100%; text-align: center; }
+    button { padding: 10px 14px; font-size: 13px; }
+  }
+  button:hover:not(:disabled) { border-color: var(--warm); color: var(--warm); }
+  button:focus-visible { outline: 2px solid var(--warm); outline-offset: 2px; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { border-color: #5a4220; color: var(--warm); }
+  .editor { border-top: 1px solid var(--line); background: #0d0f16; }
+  .tabs { border-bottom: 1px solid var(--line); padding: 0 12px; }
+  .tab { color: var(--text); padding: 8px 12px; border-bottom: 2px solid var(--blue); margin-left: -12px; }
+  #code {
+    margin: 0; padding: 8px 0; font-size: 13px; line-height: 1.55;
+    height: calc(13px * 1.55 * 12 + 16px); overflow: hidden; white-space: pre;
+  }
+  @media (max-width: 560px) { #code { font-size: 11px; height: calc(11px * 1.55 * 12 + 16px); } .bar { gap: 6px; font-size: 10px; } .status { font-size: 10px; } .actions { justify-content: center; } .win { border-radius: 8px; } }
+  .l { padding: 0 12px; }
+  .l.cur { background: #171b27; box-shadow: inset 2px 0 0 #c0446a; }
+  .no { color: #3b4252; display: inline-block; width: 3.2em; text-align: right; margin-right: 1.4em; user-select: none; }
+  .kw { color: #ff7b72; } .st { color: #a5d6ff; } .nu { color: #79c0ff; }
+  .de { color: #d2a8ff; } .fn { color: #d2a8ff; } .cm { color: #6e7681; }
+  .sec { color: var(--warm); font-weight: 600; }
+  .caret { display: inline-block; width: .6em; height: 1.1em; vertical-align: -2px; background: var(--text); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<div class="win">
+  <div class="bar"><span><b>art.py</b> · 생일 케이크 코드 아트</span><span id="clock">t 00.00s</span></div>
+  <canvas id="art" aria-label="코드로 그려지는 아스키 생일 케이크"></canvas>
+  <div class="status">
+    <span id="candle">candle off · flame 0.00 · confetti 0</span>
+    <span id="built">built 0%</span>
+  </div>
+  <div class="term">
+    <span>$ py art.py</span>
+    <div class="actions">
+      <button id="blow" class="primary" disabled>후~ 촛불 끄기</button>
+      <button id="skip">바로 완성</button>
+      <button id="replay">처음부터</button>
+    </div>
+    <span id="run"><i>●</i> running · 60 fps</span>
+  </div>
+  <div class="editor">
+    <div class="tabs"><span class="tab">art.py</span><span id="ln">Ln 1</span></div>
+    <pre id="code"></pre>
+  </div>
+</div>
+
+<script>
+// 받는 친구 이름 (비워 두면 "생일 축하해!"만 나와요)
+const TO_NAME = '';
+
+// ───────────────────────── 화면에 타이핑될 코드 (표시용) ─────────────────────────
+const CODE = `# art.py — 생일 케이크 코드 아트
+import numpy as np
+from term import Canvas, ease, rng
+
+W, H = 96, 62
+RAMP = " .:-=+*#%@"
+LIGHT = np.array([-.55, .6, -.6])
+LIGHT /= np.linalg.norm(LIGHT)
+TAU = 2 * np.pi
+
+layers = []
+def layer(fn):
+    layers.append(fn)
+    return fn
+
+def spin(p, t, tilt=-.32):
+    a = t * .6
+    c, s = np.cos(a), np.sin(a)
+    x, y, z = p[..., 0], p[..., 1], p[..., 2]
+    x, z = x * c - z * s, x * s + z * c
+    y, z = (y * np.cos(tilt) - z * np.sin(tilt),
+            y * np.sin(tilt) + z * np.cos(tilt))
+    return np.stack([x, y, z], -1)
+
+def ring(a):
+    return np.stack([np.cos(a), 0 * a, np.sin(a)], -1)
+
+def drip(a, k=9):
+    # 크림이 흘러내린 길이
+    return .05 + .12 * np.clip(np.sin(k * a + 1.3), 0, 1) ** 4
+
+@layer
+def plate(t, cv):
+    # ▶ 접시
+    r, a = np.meshgrid(np.linspace(0, 1.12, 60), np.linspace(0, TAU, 400))
+    disk = r[..., None] * ring(a) + [0, -.5, 0]
+    cv.solid.append((spin(disk, t), PLATE))
+    rim = 1.12 * ring(a[:, 0]) + [0, -.49, 0]
+    cv.solid.append((spin(rim, t), GOLD))
+
+@layer
+def bottom(t, cv):
+    # ▶ 초코 시트 1단
+    g = grown("1단")                          # 아래부터 차곡차곡
+    a, y = np.meshgrid(np.linspace(0, TAU, 480), np.linspace(-.47, -.07, 60))
+    side = .85 * ring(a) + y[..., None] * [0, 1, 0]
+    cream = y > -.07 - drip(a)                # 윗부분은 크림
+    col = np.where(cream[..., None], FROST, CHOC)
+    keep = y < -.47 + .4 * g
+    cv.solid.append((spin(side[keep], t), col[keep]))
+
+@layer
+def top(t, cv):
+    # ▶ 딸기 시트 2단
+    g = grown("2단")
+    a, y = np.meshgrid(np.linspace(0, TAU, 360), np.linspace(-.07, .27, 50))
+    side = .55 * ring(a) + y[..., None] * [0, 1, 0]
+    cream = y > .27 - drip(a, 7) * .8
+    col = np.where(cream[..., None], FROST, PINK)
+    keep = y < -.07 + .34 * g
+    cv.solid.append((spin(side[keep], t), col[keep]))
+
+@layer
+def deco(t, cv):
+    # ▶ 생크림 & 딸기
+    parts = DOLLOPS + BERRIES + TOP_DOLLOPS
+    for k, (c, r, col) in enumerate(parts):
+        s = ease(grown("장식") * len(parts) - k)   # 하나씩 톡톡
+        if s <= 0:
+            continue
+        p, n = blob(c, r * s)
+        cv.solid.append((spin(p, t), col * shade(n, t)))
+
+@layer
+def sprinkles(t, cv):
+    # ▶ 알록달록 스프링클
+    n = int(len(SPRINKLES) * grown("스프링클"))
+    for (x, y, z), ch, col in SPRINKLES[:n]:
+        cv.dot(spin(np.array([x, y + .004, z]), t), ch, col)
+
+@layer
+def candle(t, cv):
+    # ▶ 줄무늬 초
+    g = grown("초")
+    a, y = np.meshgrid(np.linspace(0, TAU, 70), np.linspace(.27, .66, 40))
+    wax = .045 * ring(a) + y[..., None] * [0, 1, 0]
+    stripe = (a / TAU * 2 + y * 6).astype(int) % 2
+    col = np.where(stripe[..., None], BLUE, WHITE)
+    keep = y < .27 + .42 * g
+    cv.solid.append((spin(wax[keep], t), col[keep]))
+    cv.line(spin(WICK, t), "|")               # 심지
+
+@layer
+def light(t, cv):
+    # ▶ 불 붙이기
+    g = grown("불")
+    if g < .5:
+        cv.spark(spin(WICK, t), n=2)          # 치익… 불씨
+        return
+    h = ease((g - .5) * 2) * (.88 + .08 * noise(t * 9))
+    v = np.linspace(0, 1, 40)[:, None]        # 아래 → 위
+    u = np.linspace(-2.8, 2.8, 30)[None, :]
+    bend = .45 * noise(t * 2.3) * v**2 + .28 * v * noise(v * 4 - t * 7)
+    prof = np.where(v < .28, np.sqrt(1 - ((.28 - v) / .28)**2),
+                    ((1 - v) / .72) ** .85)
+    tongue = 1 + .35 * v * noise(v * 5 - t * 9)   # 날름거리는 불꽃 혀
+    heat = 1 - abs(u - bend) / (prof * tongue + .2)
+    heat = heat * (1 - .55 * v) + .12 * noise(u * 9 + t * 11)
+    cv.flame(spin(WICK, t), heat * h, palette=[
+        (.72, "@", WHITE), (.54, "#", YELLOW), (.38, "*", ORANGE),
+        (.24, "+", EMBER), (0, ":", RED)], base=BLUE)
+    cv.glow(spin(WICK, t), radius=5 * h)      # 따뜻한 빛 번짐
+    cv.embers(spin(WICK, t) + [0, .4 * h, 0], rate=.14)  # 불티
+
+@layer
+def banner(t, cv):
+    # ▶ HAPPY BIRTHDAY
+    text = ["HAPPY", "BIRTHDAY"]
+    n, k = sum(map(len, text)), 0
+    for row, word in enumerate(text):
+        for i, ch in enumerate(word):
+            drop = 1 - ease(grown("배너") * n - k)
+            x = (W - len(word) * 12) // 2 + i * 12
+            cv.glyph(FONT[ch], x, 2 + row * 9 - 5 * drop,
+                     fill="$#@&%8B", col=(GOLD, CORAL)[(i + row) % 2])
+            k += 1
+
+@layer
+def confetti(t, cv):
+    # ▶ 꽃가루 펑!
+    n = int(180 * grown("꽃가루"))
+    P = CONFETTI[:n]
+    P[:, 1] += P[:, 2] * .1
+    P[:, 0] += np.sin(t * 2 + P[:, 3]) * .15
+    cv.scatter(P, "|/-\\\\"[int(t * 6) % 4])
+
+def main():
+    cv = Canvas(W, H, fps=60)
+    for t in cv.clock():
+        cv.clear()
+        for fn in layers:
+            fn(t, cv)
+        cv.zbuffer(RAMP)                      # 가까운 점만 남기기
+        cv.flush()
+
+if __name__ == "__main__":
+    main()
+`;
+
+// ───────────────────────── 코드 섹션 → 레이어 매핑 ─────────────────────────
+const SECTIONS = {};
+(() => {
+  const lines = CODE.split('\n');
+  let off = 0;
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = (lines[i + 1] || '').match(/^def (\w+)\(t, cv\)/);
+    if (lines[i].trim() === '@layer' && m) starts.push([m[1], off]);
+    if (lines[i].startsWith('def main')) starts.push(['__end', off]);
+    off += lines[i].length + 1;
+  }
+  for (let i = 0; i < starts.length - 1; i++) SECTIONS[starts[i][0]] = [starts[i][1], starts[i + 1][1]];
+})();
+
+// ───────────────────────── 유틸 ─────────────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rnd = mulberry32(19960101);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const easeOutBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+function norm3(x, y, z) { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; }
+
+const RAMP = ' .:-=+*#%@';
+const RAMP_CODES = [...RAMP].map(c => c.charCodeAt(0));
+const D = 4, TILT = -0.32;
+const REDUCED = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+const SPIN = REDUCED ? 0.2 : 0.6;
+const L = norm3(-0.55, 0.6, -0.6);
+const HV = norm3(L[0], L[1], L[2] - 1);
+const TAU = Math.PI * 2;
+
+// ───────────────────────── 재질/색 ─────────────────────────
+const M = { PLATE: 0, GOLD: 1, CHOC: 2, CHOC_B: 3, FROST: 4, PINK: 5, PINK_B: 6, BERRY: 7, LEAF: 8,
+  WAX_A: 9, WAX_B: 10, WICK: 11, F_CORE: 12, F_MID: 13, F_OUT: 14,
+  S1: 15, S2: 16, S3: 17, S4: 18, S5: 19, B_GOLD: 20, B_CORAL: 21, SKY: 22, SMOKE: 23, WHITE: 24, FLASH: 25,
+  F_YEL: 26, F_RED: 27, F_BLUE: 28 };
+const BASE = [
+  [204, 195, 189], [218, 178, 112], [151, 94, 82], [119, 73, 66], [255, 239, 224], [220, 147, 158], [195, 112, 132],
+  [199, 48, 74], [83, 137, 101], [255, 248, 236], [205, 159, 179], [70, 58, 50],
+  [255, 252, 220], [255, 196, 70], [255, 104, 44],
+  [255, 92, 128], [90, 204, 255], [255, 222, 72], [140, 238, 140], [196, 140, 255],
+  [245, 215, 161], [227, 179, 161], [150, 150, 200], [160, 160, 172], [255, 255, 255], [255, 236, 210],
+  [255, 222, 92], [226, 56, 30], [96, 146, 255],
+];
+const GLOW = new Uint8Array(BASE.length);
+[M.F_CORE, M.F_MID, M.F_OUT, M.F_YEL, M.F_RED, M.F_BLUE, M.WHITE, M.FLASH, M.B_GOLD, M.B_CORAL].forEach(m => GLOW[m] = 1);
+const COLOR = [];
+BASE.forEach(([r, g, b]) => {
+  for (let l = 0; l < 10; l++) {
+    const f = 0.2 + 0.8 * l / 9;
+    const w = l >= 8 ? (l - 7) * 0.05 : 0;
+    COLOR.push(`rgb(${Math.min(255, Math.round(r * f + 255 * w))},${Math.min(255, Math.round(g * f + 255 * w))},${Math.min(255, Math.round(b * f + 255 * w))})`);
+  }
+});
+const SPRINKLE_MATS = [M.S1, M.S2, M.S3, M.S4, M.S5];
+
+// ───────────────────────── 점 구름 도구 ─────────────────────────
+function makeSet(cap, opts = {}) {
+  return Object.assign({ n: 0, x: new Float32Array(cap), y: new Float32Array(cap), z: new Float32Array(cap),
+    nx: new Float32Array(cap), ny: new Float32Array(cap), nz: new Float32Array(cap),
+    key: new Float32Array(cap), aux: new Float32Array(cap), mat: new Uint8Array(cap), cull: true, fixed: false }, opts);
+}
+function push(P, x, y, z, nx, ny, nz, key, aux, mat) {
+  const i = P.n++;
+  P.x[i] = x; P.y[i] = y; P.z[i] = z; P.nx[i] = nx; P.ny[i] = ny; P.nz[i] = nz;
+  P.key[i] = key; P.aux[i] = aux; P.mat[i] = mat;
+}
+function fib(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n, rr = Math.sqrt(1 - y * y), th = i * 2.39996;
+    out.push([rr * Math.cos(th), y, rr * Math.sin(th)]);
+  }
+  return out;
+}
+function ellArea(a, b, c) { const p = 1.6075; return 4 * Math.PI * Math.pow((Math.pow(a * b, p) + Math.pow(a * c, p) + Math.pow(b * c, p)) / 3, 1 / p); }
+const DENS = 5200;
+const drip = (a, k = 9) => 0.05 + 0.12 * Math.pow(Math.max(0, Math.sin(k * a + 1.3)), 4);
+
+// 원기둥 옆면 (크림 흘러내림 포함)
+function addSide(P, R, y0, y1, ny, na, matFn, keyFn) {
+  for (let iy = 0; iy < ny; iy++) for (let ia = 0; ia < na; ia++) {
+    const y = y0 + (y1 - y0) * (iy + rnd()) / ny, a = (ia + rnd() * 0.8) / na * TAU;
+    push(P, R * Math.cos(a), y, R * Math.sin(a), Math.cos(a), 0, Math.sin(a), keyFn(y, a), (rnd() - 0.5) * 0.18, matFn(y, a));
+  }
+}
+// 윗면 원판
+function addDisk(P, R, y, mat, keyFn, rIn = 0) {
+  const NR = Math.ceil(R * 70);
+  for (let ir = 0; ir < NR; ir++) {
+    const r = rIn + (R - rIn) * (ir + rnd()) / NR;
+    const na = Math.max(6, Math.ceil(r * 520));
+    for (let ia = 0; ia < na; ia++) {
+      const a = (ia + rnd()) / na * TAU;
+      push(P, r * Math.cos(a), y, r * Math.sin(a), 0, 1, 0, keyFn(r), (rnd() - 0.5) * 0.14, mat);
+    }
+  }
+}
+function addTorus(P, [cx0, cy0, cz0], R, r, mat, keyFn, nu = 260, nv = 18) {
+  for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nv; iv++) {
+    const u = (iu + rnd() * 0.5) / nu * TAU, v = (iv + rnd() * 0.5) / nv * TAU;
+    const cu = Math.cos(u), su = Math.sin(u), cv = Math.cos(v), sv = Math.sin(v);
+    push(P, cx0 + (R + r * cv) * cu, cy0 + r * sv, cz0 + (R + r * cv) * su, cv * cu, sv, cv * su, keyFn(u), (rnd() - 0.5) * 0.1, mat);
+  }
+}
+
+// ───────────────────────── 케이크 형상 ─────────────────────────
+// 접시 (밝기 고정 무늬) + 금테
+const PLATE = makeSet(40000, { cull: false, fixed: true });
+for (let ir = 0; ir < 64; ir++) {
+  const r = 1.12 * (ir + rnd()) / 64;
+  const na = Math.max(6, Math.ceil(r * 380));
+  for (let ia = 0; ia < na; ia++) {
+    const a = (ia + rnd()) / na * TAU;
+    let lvl = clamp(Math.round((0.28 + 0.2 * rnd() + (ir % 9 === 0 ? 0.15 : 0)) * 9), 2, 6);
+    push(PLATE, r * Math.cos(a), -0.5, r * Math.sin(a), 0, 1, 0, r / 1.12 * 0.9, lvl, M.PLATE);
+  }
+}
+const RIM = makeSet(8000);
+addTorus(RIM, [0, -0.49, 0], 1.12, 0.03, M.GOLD, u => 0.9 + u / TAU * 0.1);
+
+// 1단: 초코 시트 + 흘러내린 크림 + 윗면 크림 + 아래 크림 테두리
+const BOTTOM = makeSet(60000);
+addSide(BOTTOM, 0.85, -0.47, -0.07, 60, 480,
+  (y, a) => y > -0.07 - drip(a) ? M.FROST : (rnd() < 0.3 ? M.CHOC_B : M.CHOC),
+  y => (y + 0.47) / 0.40 * 0.85);
+addTorus(BOTTOM, [0, -0.465, 0], 0.86, 0.03, M.FROST, () => 0.02);
+addDisk(BOTTOM, 0.85, -0.07, M.FROST, r => 0.85 + 0.15 * r / 0.85);
+
+// 2단: 딸기 시트 + 크림
+const TOP = makeSet(40000);
+addSide(TOP, 0.55, -0.07, 0.27, 50, 360,
+  (y, a) => y > 0.27 - drip(a, 7) * 0.8 ? M.FROST : (rnd() < 0.3 ? M.PINK_B : M.PINK),
+  y => (y + 0.07) / 0.34 * 0.85);
+addDisk(TOP, 0.55, 0.27, M.FROST, r => 0.85 + 0.15 * r / 0.55);
+
+// 생크림 방울 & 딸기 (하나씩 톡톡)
+const PARTS = [];
+for (let k = 0; k < 18; k++) {
+  const a = k / 18 * TAU;
+  PARTS.push({ c: [0.78 * Math.cos(a), -0.05, 0.78 * Math.sin(a)], r: [0.055, 0.05, 0.055], mat: M.FROST });
+}
+for (let k = 0; k < 8; k++) {
+  const a = (k + 0.5) / 8 * TAU;
+  const c = [0.665 * Math.cos(a), -0.012, 0.665 * Math.sin(a)];
+  PARTS.push({ c, r: [0.05, 0.062, 0.05], mat: M.BERRY, shiny: true });
+  PARTS.push({ c: [c[0], c[1] + 0.055, c[2]], r: [0.04, 0.012, 0.04], mat: M.LEAF });
+}
+for (let k = 0; k < 12; k++) {
+  const a = (k + 0.25) / 12 * TAU;
+  PARTS.push({ c: [0.49 * Math.cos(a), 0.29, 0.49 * Math.sin(a)], r: [0.045, 0.04, 0.045], mat: M.FROST });
+}
+PARTS.forEach(f => f.dirs = fib(Math.max(70, Math.ceil(ellArea(...f.r) * DENS * 1.6))));
+
+// 스프링클
+const SPRINKLES = [];
+const SPR_CH = ["'", ',', '-', '`', '.'];
+for (let i = 0; i < 180; i++) {
+  let r, y;
+  if (i < 120) { r = 0.1 + 0.36 * Math.sqrt(rnd()); y = 0.275; }
+  else { r = 0.58 + 0.13 * rnd(); y = -0.065; }
+  const a = rnd() * TAU;
+  SPRINKLES.push({ x: r * Math.cos(a), y, z: r * Math.sin(a), mat: SPRINKLE_MATS[i % 5], ch: SPR_CH[Math.floor(rnd() * SPR_CH.length)].charCodeAt(0) });
+}
+SPRINKLES.sort(() => rnd() - 0.5);
+
+// 초 (파랑/하양 줄무늬)
+const CANDLE = makeSet(6000);
+addSide(CANDLE, 0.045, 0.27, 0.66, 40, 70,
+  (y, a) => Math.floor(a / TAU * 2 + y * 6) % 2 ? M.WAX_B : M.WAX_A,
+  y => (y - 0.27) / 0.39 * 0.9);
+addDisk(CANDLE, 0.045, 0.66, M.WAX_A, () => 0.92);
+
+// 배너 글꼴 (5x7)
+const FONT = {
+  H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
+  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+  P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+  B: ['11110', '10001', '10001', '11110', '10001', '10001', '11110'],
+  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
+  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  D: ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
+};
+const FILL = '$#@&%8B';
+
+// ───────────────────────── 캔버스 & 버퍼 ─────────────────────────
+const cvs = document.getElementById('art'), ctx = cvs.getContext('2d');
+let COLS, ROWS, N, zb, chb, cmb, cw, chh, fontPx, Wpx, Hpx, S, cx, cy, BANNER_LINES, bannerBottom;
+let SKY = [], RAIN = [];
+// 폰/느린 기기는 글로우를 줄여서 가볍게
+let lastW = 0, slowFor = 0;
+let LOW = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+function resize() {
+  const w = cvs.parentElement.clientWidth || 800;
+  if (w === lastW) return;          // 모바일 주소창이 접힐 때 생기는 높이 변화는 무시
+  lastW = w;
+  const narrow = w < 560;
+  if (narrow) LOW = true;
+  COLS = narrow ? 64 : 96; ROWS = narrow ? 66 : 62;
+  BANNER_LINES = ['HAPPY', 'BIRTHDAY'];
+  N = COLS * ROWS;
+  zb = new Float32Array(N); chb = new Uint16Array(N); cmb = new Uint16Array(N);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cw = w / COLS; fontPx = cw / 0.6; chh = fontPx;
+  Wpx = w; Hpx = Math.round(chh * ROWS);
+  cvs.width = Math.round(w * dpr); cvs.height = Math.round(Hpx * dpr);
+  cvs.style.height = Hpx + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  bannerBottom = (3 + BANNER_LINES.length * 9) * chh;
+  const topCake = bannerBottom + 4 * chh;
+  const hRem = Hpx - topCake - chh;
+  S = Math.min(0.42 * Wpx, hRem / 2.1);
+  cx = Wpx / 2; cy = topCake + 0.98 * S;
+  SKY = [];
+  for (let i = 0; i < COLS * 0.7; i++) SKY.push({ c: Math.floor(Math.random() * COLS), r: Math.floor(Math.random() * ROWS * 0.9), ph: Math.random() * 6.28, sp: 1 + Math.random() * 2 });
+  RAIN = [];
+  for (let i = 0; i < 180; i++) RAIN.push({ x: Math.random() * COLS, y: -Math.random() * 6, v: 4 + Math.random() * 6, ph: Math.random() * 4, mat: SPRINKLE_MATS[i % 5], on: false });
+}
+window.addEventListener('resize', resize);
+resize();
+
+let ca, sa;
+const cp = Math.cos(TILT), sp = Math.sin(TILT);
+function plot(px, py, z, code, m, lvl) {
+  const c = Math.floor(px / cw), r = Math.floor(py / chh);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  const i = r * COLS + c;
+  if (z < zb[i]) { zb[i] = z; chb[i] = code; cmb[i] = m * 10 + lvl; }
+}
+function cellPlot(c, r, z, code, m, lvl) {
+  c = Math.floor(c); r = Math.floor(r);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
+  const i = r * COLS + c;
+  if (z < zb[i]) { zb[i] = z; chb[i] = code; cmb[i] = m * 10 + lvl; }
+}
+function rot(x, y, z) {
+  const x1 = x * ca - z * sa, z1 = x * sa + z * ca;
+  return [x1, y * cp - z1 * sp, y * sp + z1 * cp];
+}
+function toScreen(x, y, z) {
+  const [x1, y1, z1] = rot(x, y, z);
+  const f = D / (D + z1);
+  return [cx + x1 * S * f, cy - y1 * S * f, z1, f];
+}
+
+function drawSet(P, g, flash) {
+  for (let i = 0; i < P.n; i++) {
+    const key = P.key[i];
+    if (key > g) continue;
+    const nx = P.nx[i], ny = P.ny[i], nz = P.nz[i];
+    const nx1 = nx * ca - nz * sa, nz1 = nx * sa + nz * ca;
+    const ny2 = ny * cp - nz1 * sp, nz2 = ny * sp + nz1 * cp;
+    if (P.cull && nz2 > 0.3) continue;
+    const x = P.x[i], y = P.y[i], z = P.z[i];
+    const x1 = x * ca - z * sa, z1 = x * sa + z * ca;
+    const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    const f = D / (D + z2);
+    let lvl, m = P.mat[i];
+    if (P.fixed) lvl = P.aux[i];
+    else {
+      const d = nx1 * L[0] + ny2 * L[1] + nz2 * L[2];
+      lvl = clamp(Math.round((0.14 + 0.86 * Math.max(0, d) + P.aux[i]) * 9), 1, 9);
+    }
+    if (flash && g < 1 && g - key < 0.025) { m = M.FLASH; lvl = 9; }
+    plot(cx + x1 * S * f, cy - y2 * S * f, z2, RAMP_CODES[lvl], m, lvl);
+  }
+}
+
+function drawPart(f, s) {
+  if (s <= 0.001) return;
+  const [cx0, cy0, cz0] = f.c, [rx, ry, rz] = f.r;
+  for (const [ux, uy, uz] of f.dirs) {
+    const [n0, n1, n2] = norm3(ux / rx, uy / ry, uz / rz);
+    const [nx, ny, nz] = rot(n0, n1, n2);
+    if (nz > 0.25) continue;
+    const [px, py, z] = toScreen(cx0 + ux * rx * s, cy0 + uy * ry * s, cz0 + uz * rz * s);
+    const spec = f.shiny ? Math.pow(Math.max(0, nx * HV[0] + ny * HV[1] + nz * HV[2]), 24) : 0;
+    if (spec > 0.5) { plot(px, py, z - 0.005, 64, M.WHITE, 9); continue; }
+    const d = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]);
+    const lvl = clamp(Math.round((0.28 + 0.72 * d) * 9), 2, 9);
+    plot(px, py, z - 0.005, RAMP_CODES[lvl], f.mat, lvl);
+  }
+}
+
+function drawSprinkles(g) {
+  const n = Math.floor(SPRINKLES.length * g);
+  for (let k = 0; k < n; k++) {
+    const s = SPRINKLES[k];
+    const [px, py, z] = toScreen(s.x, s.y + 0.004, s.z);
+    plot(px, py, z - 0.02, s.ch, s.mat, 9);
+  }
+}
+
+function drawWick(g) {
+  if (g < 0.92) return;
+  for (let k = 0; k <= 4; k++) {
+    const [px, py, z] = toScreen(0, 0.665 + k * 0.012, 0);
+    plot(px, py, z - 0.03, 124 /* | */, M.WICK, 7);
+  }
+}
+
+// ── 불꽃 / 불씨 / 연기 / 꽃가루
+let flamePos = null;
+// 부드러운 1D 노이즈 (사인 여러 개 겹치기)
+const fnoise = x => (Math.sin(x * 1.7) + 0.5 * Math.sin(x * 3.1 + 1.3) + 0.25 * Math.sin(x * 5.3 + 2.1)) / 1.75;
+function drawFlame(scale, t) {
+  flamePos = null;
+  if (scale <= 0.01) return;
+  const [px0, py0, z0, f] = toScreen(0, 0.705, 0);
+  const flick = 0.88 + 0.08 * fnoise(t * 9) + 0.04 * Math.sin(t * 31);
+  const h = 0.42 * S * f * scale * flick, w = 0.095 * S * f * scale;
+  const sway = 0.45 * fnoise(t * 2.3);
+  const tipBend = sway + 0.28 * fnoise(4 - t * 7);
+  flamePos = { x: px0, base: py0, h, w, tipX: px0 + tipBend * w, a: scale, flick };
+  const r0 = Math.floor((py0 - h * 1.15) / chh), r1 = Math.floor(py0 / chh);
+  const c0 = Math.floor((px0 - w * 2.8) / cw), c1 = Math.floor((px0 + w * 2.8) / cw);
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+    const pxc = (c + 0.5) * cw, pyc = (r + 0.5) * chh;
+    const v = (py0 - pyc) / h;
+    if (v < -0.1 || v > 1.15) continue;
+    const vv = clamp(v, 0, 1);
+    // 위로 갈수록 크게 일렁임
+    const bend = sway * vv * vv + 0.28 * vv * fnoise(vv * 4 - t * 7);
+    const u = (pxc - px0) / w - bend;
+    const prof = vv < 0.28 ? Math.sqrt(Math.max(0, 1 - ((0.28 - vv) / 0.28) ** 2)) : Math.pow((1 - vv) / 0.72, 0.85);
+    // 가장자리에서 날름거리는 불꽃 혀 (좌우가 따로 움직임)
+    const tongue = 1 + 0.35 * vv * fnoise(vv * 5 - t * 9 + (u > 0 ? 1.7 : 0));
+    const lim = prof * tongue + 0.2;
+    const a = Math.abs(u);
+    if (a > lim) continue;
+    const q = 1 - a / lim;
+    const heat = q * (1 - 0.55 * vv) + 0.12 * fnoise(c * 1.3 + r * 2.1 + t * 11);
+    let m, code, lvl = 9;
+    if (vv < 0.13 && q > 0.25 && q < 0.75) { m = M.F_BLUE; code = 94; lvl = 8; }       // ^ 파란 불꽃 밑동
+    else if (heat > 0.72) { m = M.F_CORE; code = 64; }                                   // @ 하얀 심
+    else if (heat > 0.54) { m = M.F_YEL; code = vv > 0.5 ? 37 : 35; }                     // % # 노랑
+    else if (heat > 0.38) { m = M.F_MID; code = 42; }                                    // * 주황
+    else if (heat > 0.24) { m = M.F_OUT; code = vv > 0.6 ? 61 : 43; lvl = 8; }            // = + 진주황
+    else { m = M.F_RED; code = vv > 0.7 ? 39 : 58; lvl = 7; }                             // ' : 붉은 끝
+    cellPlot(c, r, z0 - 0.3, code, m, lvl);
+  }
+}
+
+const SPARKS = [], SMOKE = [], BURST = [];
+function sparkBurst(n, speed) {
+  const [px, py] = toScreen(0, 0.72, 0);
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, v = speed * (0.4 + Math.random() * 0.8);
+    SPARKS.push({ x: px, y: py, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.5 });
+  }
+}
+function confettiBurst(n) {
+  const [px, py] = toScreen(0, 0.4, 0);
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, v = (180 + Math.random() * 260) * (S / 260);
+    BURST.push({ x: px, y: py, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 3 + Math.random() * 2, ph: Math.random() * 4, mat: SPRINKLE_MATS[i % 5] });
+  }
+}
+function updateParticles(dt, t) {
+  for (let i = SPARKS.length - 1; i >= 0; i--) {
+    const p = SPARKS[i];
+    p.vy += (p.g === undefined ? 260 : p.g) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+    if (p.ember) p.x += fnoise(t * 5 + p.life * 7) * 18 * dt;
+    if (p.life <= 0) { SPARKS.splice(i, 1); continue; }
+    if (p.ember) plot(p.x, p.y, -1e8, p.life > 0.7 ? 42 : p.life > 0.35 ? 39 : 46, p.life > 0.6 ? M.F_MID : M.F_RED, p.life > 0.3 ? 9 : 7);
+    else plot(p.x, p.y, -1e8, p.life > 0.6 ? 42 : p.life > 0.3 ? 43 : 46, p.life > 0.5 ? M.F_CORE : M.F_MID, 9);
+  }
+  for (let i = SMOKE.length - 1; i >= 0; i--) {
+    const p = SMOKE[i];
+    p.y -= (22 + (2.4 - p.life) * 10) * dt * (S / 260);
+    p.x += (Math.sin(t * 2.2 + p.ph) * 18 + 7) * dt * (S / 260);
+    p.life -= dt;
+    if (p.life <= 0) { SMOKE.splice(i, 1); continue; }
+    plot(p.x, p.y, -1e7, p.ph > 3 ? 40 : p.ph > 1.5 ? 126 : 41, M.SMOKE, clamp(Math.round(p.life * 3), 1, 7));
+  }
+  for (let i = BURST.length - 1; i >= 0; i--) {
+    const p = BURST[i];
+    p.vy += 240 * dt; p.vx *= 1 - 0.8 * dt; p.vy *= 1 - 0.8 * dt;
+    p.x += p.vx * dt + Math.sin(t * 3 + p.ph) * 10 * dt; p.y += p.vy * dt; p.life -= dt;
+    if (p.life <= 0 || p.y > Hpx) { BURST.splice(i, 1); continue; }
+    plot(p.x, p.y, -1e9, '|/-\\'.charCodeAt(Math.floor(t * 6 + p.ph * 4) % 4), p.mat, 9);
+  }
+}
+
+function drawRain(g, t, dt) {
+  const n = Math.floor(RAIN.length * g);
+  let shown = 0;
+  for (let k = 0; k < RAIN.length; k++) {
+    const p = RAIN[k];
+    if (k < n && !p.on) { p.on = true; p.y = -Math.random() * 8; }
+    if (!p.on) continue;
+    p.y += p.v * dt * 0.6; p.x += Math.sin(t * 1.6 + p.ph) * 1.2 * dt;
+    if (p.y >= ROWS) { p.y = -Math.random() * 4; p.x = Math.random() * COLS; }
+    if (p.y < 0) continue;
+    shown++;
+    const c = ((Math.floor(p.x) % COLS) + COLS) % COLS;
+    cellPlot(c, p.y, -1e9, '|/-\\'.charCodeAt(Math.floor(t * 6 + p.ph * 4) % 4), p.mat, 9);
+  }
+  return shown;
+}
+
+function drawBanner(g, t) {
+  // 클래식한 샴페인 골드 레터링: 기존 ASCII 문자 스타일은 유지
+  const total = BANNER_LINES.join('').length;
+  let k = 0;
+  BANNER_LINES.forEach((word, li) => {
+    const step = 7, width = word.length * step - 2;
+    const x0 = Math.floor((COLS - width) / 2);
+    [...word].forEach((letter, i) => {
+      const progress = clamp(g * total - k, 0, 1); k++;
+      if (progress <= 0) return;
+      const drop = Math.round((1 - easeOutBack(progress)) * -3);
+      const glyph = FONT[letter];
+      for (let gy = 0; gy < 7; gy++) for (let gx = 0; gx < 5; gx++) {
+        if (glyph[gy][gx] !== '1') continue;
+        const col = x0 + i * step + gx, row = 3 + li * 9 + gy + drop;
+        const shimmer = 0.5 + 0.5 * Math.sin(t * 1.4 - col * 0.11);
+        const lvl = clamp(Math.round(7 + shimmer * 2), 7, 9);
+        cellPlot(col, row, 1e5, '@'.charCodeAt(0), M.B_GOLD, lvl);
+      }
+    });
+  });
+  if (g > 0.96) {
+    const y = 22;
+    const span = Math.min(12, Math.floor(COLS * 0.13));
+    for (let i = 0; i < span; i++) {
+      const offset = Math.floor(COLS / 2);
+      const level = i === span - 1 ? 8 : 5;
+      cellPlot(offset - 5 - span + i, y, 1e5, 45, M.B_GOLD, level);
+      cellPlot(offset + 5 + i, y, 1e5, 45, M.B_GOLD, level);
+    }
+    cellPlot(Math.floor(COLS / 2), y, 1e5, 42, M.B_GOLD, 9);
+  }
+}
+
+function drawSky(t) {
+  for (const s of SKY) {
+    const tw = 0.5 + 0.5 * Math.sin(t * s.sp + s.ph);
+    const idx = Math.floor(tw * 2.9);
+    if (idx === 0) continue;
+    const i = s.r * COLS + s.c;
+    if (zb[i] > 1e7) { zb[i] = 1e7; chb[i] = ' .+'.charCodeAt(idx); cmb[i] = M.SKY * 10 + 2 + idx * 2; }
+  }
+}
+
+const CHAR_CACHE = {};
+const chr = code => CHAR_CACHE[code] || (CHAR_CACHE[code] = String.fromCharCode(code));
+
+function flush(subAlpha, subText) {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#06070b';
+  ctx.fillRect(0, 0, Wpx, Hpx);
+  // 촛불 주변 따뜻한 빛
+  if (flamePos) {
+    const { x, base, h, w, tipX, a, flick } = flamePos;
+    const cyg = base - h * 0.42, R = h * 5;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // 넓게 번지는 따뜻한 빛 (불꽃 세기에 따라 일렁임)
+    const halo = ctx.createRadialGradient(x, cyg, 0, x, cyg, R);
+    halo.addColorStop(0, `rgba(255,160,60,${0.26 * a * flick})`);
+    halo.addColorStop(0.35, `rgba(255,110,40,${0.08 * a * flick})`);
+    halo.addColorStop(1, 'rgba(255,90,30,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(x - R, cyg - R, R * 2, R * 2);
+    // 글자 뒤에 깔리는 부드러운 불꽃 몸통
+    if (!LOW) ctx.filter = `blur(${Math.max(2, w * 0.35).toFixed(1)}px)`;
+    const body = ctx.createLinearGradient(0, base, 0, base - h);
+    body.addColorStop(0, `rgba(255,250,225,${0.55 * a})`);
+    body.addColorStop(0.35, `rgba(255,205,80,${0.45 * a})`);
+    body.addColorStop(0.7, `rgba(255,110,30,${0.3 * a})`);
+    body.addColorStop(1, 'rgba(255,60,20,0)');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(x, base + w * 0.15);
+    ctx.bezierCurveTo(x - w * 1.3, base - h * 0.12, x - w * 0.55, base - h * 0.62, tipX, base - h * 1.05);
+    ctx.bezierCurveTo(x + w * 0.55, base - h * 0.62, x + w * 1.3, base - h * 0.12, x, base + w * 0.15);
+    ctx.fill();
+    // 밑동의 파란 기운
+    const blue = ctx.createRadialGradient(x, base - h * 0.04, 0, x, base - h * 0.04, w * 1.1);
+    blue.addColorStop(0, `rgba(90,140,255,${0.35 * a})`);
+    blue.addColorStop(1, 'rgba(90,140,255,0)');
+    ctx.fillStyle = blue;
+    ctx.fillRect(x - w * 1.2, base - h * 0.2, w * 2.4, h * 0.35);
+    ctx.restore();
+  }
+  ctx.font = `${fontPx.toFixed(2)}px "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace`;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.shadowBlur = 0;
+  let last = -1;
+  for (let i = 0; i < N; i++) {
+    if (zb[i] === Infinity) continue;
+    const cm = cmb[i];
+    if (cm !== last) { ctx.fillStyle = COLOR[cm]; last = cm; }
+    ctx.fillText(chr(chb[i]), (i % COLS) * cw, Math.floor(i / COLS) * chh);
+  }
+  ctx.shadowBlur = fontPx * (LOW ? 0.6 : 0.9);
+  for (let i = 0; i < N; i++) {
+    if (zb[i] === Infinity) continue;
+    const cm = cmb[i], m = Math.floor(cm / 10);
+    if (!GLOW[m] || cm % 10 < 8) continue;
+    if (LOW && m !== M.F_CORE && m !== M.F_YEL && m !== M.F_MID) continue; // 폰에선 불꽃만 빛나게
+    ctx.fillStyle = ctx.shadowColor = COLOR[cm];
+    ctx.fillText(chr(chb[i]), (i % COLS) * cw, Math.floor(i / COLS) * chh);
+  }
+  ctx.shadowBlur = 0;
+  if (subAlpha > 0) {
+    ctx.globalAlpha = subAlpha;
+    ctx.font = `${Math.round(chh * 1.5)}px "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffe2b8';
+    ctx.shadowColor = 'rgba(255,170,80,.6)'; ctx.shadowBlur = 10;
+    ctx.fillText(subText, Wpx / 2, bannerBottom + chh * 0.9);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
+}
+
+// ───────────────────────── 코드 에디터 ─────────────────────────
+const codeEl = document.getElementById('code');
+const TOK = /(#.*$)|("[^"]*"?)|(@\w+)|\b(def|for|in|if|else|return|import|from|as|while|continue|and|or|not|lambda|None|True|False)\b|(\b\d+\.?\d*|\.\d+)|([A-Za-z_]\w*)(?=\()/g;
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function highlight(line) {
+  let out = '', last = 0, m;
+  TOK.lastIndex = 0;
+  while ((m = TOK.exec(line))) {
+    out += esc(line.slice(last, m.index));
+    const cls = m[1] ? (m[1].startsWith('# ▶') ? 'sec' : 'cm') : m[2] ? 'st' : m[3] ? 'de' : m[4] ? 'kw' : m[5] ? 'nu' : 'fn';
+    out += `<span class="${cls}">${esc(m[0])}</span>`;
+    last = m.index + m[0].length;
+    if (m[0].length === 0) TOK.lastIndex++;
+  }
+  return out + esc(line.slice(last));
+}
+const VIS = 12;
+let lastRendered = -1;
+function renderCode(n) {
+  if (n === lastRendered) return;
+  lastRendered = n;
+  const lines = CODE.slice(0, n).split('\n');
+  const cur = lines.length - 1;
+  const from = Math.max(0, cur - VIS + 2);
+  let html = '';
+  for (let i = from; i <= cur; i++) {
+    html += `<div class="l${i === cur ? ' cur' : ''}"><span class="no">${i + 1}</span>${highlight(lines[i])}${i === cur ? '<span class="caret"></span>' : ''}</div>`;
+  }
+  codeEl.innerHTML = html;
+  document.getElementById('ln').textContent = `Ln ${cur + 1}`;
+}
+
+// ───────────────────────── 메인 루프 ─────────────────────────
+const CPS = 170;
+let typed = 0, budget = 0, clock = 0, fps = 60, prev = performance.now();
+let blown = false, blowMul = 1, smokeFor = 0, wasLit = false, wishFor = 0;
+const prog = name => { const s = SECTIONS[name]; return s ? clamp((typed - s[0]) / (s[1] - s[0]), 0, 1) : 0; };
+const $ = id => document.getElementById(id);
+const blowBtn = $('blow');
+
+function restart() {
+  typed = 0; budget = 0; clock = 0; lastRendered = -1;
+  blown = false; blowMul = 1; wasLit = false; smokeFor = 0; wishFor = 0;
+  SPARKS.length = SMOKE.length = BURST.length = 0;
+  RAIN.forEach(p => p.on = false);
+  blowBtn.textContent = '후~ 촛불 끄기';
+}
+blowBtn.addEventListener('click', () => {
+  if (!blown) {
+    blown = true; smokeFor = 2.5; wishFor = 0;
+    BURST.length = 0; // 촛불을 끌 때 폭죽/꽃가루가 터지지 않도록
+    blowBtn.textContent = '다시 켜기';
+  } else {
+    blown = false; smokeFor = 0; SMOKE.length = 0;
+    sparkBurst(10, 65 * (S / 260));
+    blowBtn.textContent = '후~ 촛불 끄기';
+  }
+});
+$('skip').addEventListener('click', () => { typed = CODE.length; });
+$('replay').addEventListener('click', restart);
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+  // 프레임이 계속 느리면 자동으로 가벼운 모드로
+  if (!LOW && clock > 3 && fps < 35) { if ((slowFor += dt) > 2) LOW = true; } else slowFor = 0;
+  clock += dt;
+  if (typed < CODE.length) {
+    budget += dt * CPS;
+    while (budget >= 1 && typed < CODE.length) {
+      const c = CODE[typed++];
+      if (c !== ' ' && c !== '\n') budget--;
+    }
+  }
+  const ang = clock * SPIN;
+  ca = Math.cos(ang); sa = Math.sin(ang);
+
+  zb.fill(Infinity);
+  drawSet(PLATE, prog('plate'), false);
+  drawSet(RIM, prog('plate'), false);
+  drawSet(BOTTOM, prog('bottom'), true);
+  drawSet(TOP, prog('top'), true);
+  const gd = prog('deco') * PARTS.length;
+  PARTS.forEach((f, k) => drawPart(f, easeOutBack(clamp(gd - k, 0, 1))));
+  drawSprinkles(prog('sprinkles'));
+  const gc = prog('candle');
+  drawSet(CANDLE, gc, true);
+  drawWick(gc);
+
+  // 불 붙이기
+  const gl = prog('light');
+  if (gl > 0 && gl < 0.5 && Math.random() < 0.6) sparkBurst(1, 60 * (S / 260));
+  if (gl >= 0.5 && !wasLit) { wasLit = true; sparkBurst(26, 170 * (S / 260)); }
+  if (gl === 0) wasLit = false;
+  blowMul += ((blown ? 0 : 1) - blowMul) * Math.min(1, dt * (blown ? 10 : 4));
+  const flame = (gl < 0.5 ? 0 : easeOut((gl - 0.5) * 2)) * blowMul;
+  drawFlame(flame, clock);
+  // 불꽃 끝에서 피어오르는 불티
+  if (flamePos && flame > 0.5 && !REDUCED && Math.random() < 0.14) {
+    SPARKS.push({ x: flamePos.tipX + (Math.random() - 0.5) * flamePos.w, y: flamePos.base - flamePos.h * 0.9,
+      vx: (Math.random() - 0.5) * 20, vy: -(40 + Math.random() * 60) * (S / 260), g: -15, life: 0.8 + Math.random() * 0.8, ember: true });
+  }
+  if (smokeFor > 0) {
+    smokeFor -= dt;
+    if (Math.random() < 0.85) {
+      const [px, py] = toScreen(0, 0.73, 0);
+      SMOKE.push({ x: px + (Math.random() - 0.5) * cw, y: py,
+        ph: Math.random() * 6.28, life: 1.7 + Math.random() * 0.7 });
+    }
+  }
+  if (wishFor > 0) wishFor -= dt;
+  blowBtn.disabled = gl < 1;
+
+  const gb = prog('banner');
+  drawBanner(gb, clock);
+  drawSky(clock);
+  const shown = drawRain(prog('confetti'), clock, dt);
+  updateParticles(dt, clock);
+
+  flush(0, '');
+
+  renderCode(typed);
+  $('built').textContent = `built ${Math.round(typed / CODE.length * 100)}%`;
+  const state = blown ? 'candle out' : gl >= 0.5 ? 'candle lit' : gl > 0 ? 'igniting…' : 'candle off';
+  $('candle').textContent = `${state} · flame ${flame.toFixed(2)} · confetti ${shown + BURST.length}`;
+  $('clock').textContent = `t ${clock.toFixed(2).padStart(5, '0')}s`;
+  $('run').innerHTML = `<i>●</i> running · ${Math.round(fps)} fps`;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
